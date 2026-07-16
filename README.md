@@ -10,13 +10,14 @@
   <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License">
 </p>
 
-> An AI-powered travel planning system built on LangGraph — where 8 specialized agents collaborate to craft your perfect itinerary, with real-time data, human-in-the-loop feedback, autonomous replan via tool-use agent, and streaming report generation.
+> An AI-powered travel planning system built on LangGraph — where 9 specialized agents collaborate to craft your perfect itinerary, with real-time data, human-in-the-loop feedback, an autonomous ReplanAgent with 12 tools, and streaming report generation.
 
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Quick Start](#quick-start)
 - [Example Walkthrough](#example-walkthrough)
 - [Multi-Agent Architecture](#multi-agent-architecture)
 - [From Query to Report: The Complete Pipeline](#from-query-to-report-the-complete-pipeline)
@@ -35,9 +36,36 @@
 
 ## Overview
 
-**TravelCrew** is a multi-agent collaborative travel planning system built on [LangGraph](https://github.com/langchain-ai/langgraph). Instead of a single monolithic LLM call, the system decomposes travel planning into a pipeline of **8 specialized agents**, each responsible for a distinct phase — from parsing user intent, through fetching real-time data, generating recommendations, quality auditing, all the way to producing a beautifully formatted travel report with streaming progress.
+**TravelCrew** is a multi-agent collaborative travel planning system built on [LangGraph](https://github.com/langchain-ai/langgraph). Instead of a single monolithic LLM call, the system decomposes travel planning into a pipeline of **9 specialized agents**, each responsible for a distinct phase:
 
-A key innovation is the **Human-in-the-Loop interruption** mechanism. Rather than waiting until the final report is generated before asking for revisions, the system pauses early — right after the initial plan is created — so the user can provide feedback immediately. That feedback is then fed into the powerful **ReplanAgent**, an autonomous tool-use agent that can inspect the plan, search for new POIs via Google Places, swap attractions, update preferences, and verify constraints, all in an iterative loop until the user is satisfied.
+- **Intent Parsing** — extract structured travel requirements from natural-language queries
+- **Real-Time Data Collection** — fetch POIs, weather, hotels, and travel tips from 7+ APIs in parallel
+- **Recommendation & Scoring** — rule-based pre-filtering + LLM daily-structured scoring with anti-hallucination safeguards
+- **Quality Audit** — 11-rule Critic engine that catches budget, geographic, and feasibility issues
+- **Human-in-the-Loop Feedback** — pause after the initial plan so users can provide feedback *before* the final report
+- **Autonomous ReplanAgent** — a tool-use agent with 12 tools that iteratively revises the plan (search new POIs, swap attractions, rebalance budget)
+- **Streaming Report Generation** — token-by-token SSE delivery of a 9-section Markdown report with images, maps, and budget breakdown
+
+---
+
+## Quick Start
+
+```bash
+# Clone and install
+git clone https://github.com/richardwang1236/TravelCrew.git
+cd TravelCrew
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+
+# Configure API keys
+cp .env.example .env
+# Edit .env: set DEEPSEEK_API_KEY and GOOGLE_MAPS_API_KEY (required)
+
+# Launch the web server
+python -m uvicorn server.app:app --host 0.0.0.0 --port 8000
+```
+
+Open **http://localhost:8000** and start planning! See [Deployment Guide](#deployment-guide) for full setup details and production tips.
 
 ---
 
@@ -80,16 +108,16 @@ The ReplanAgent kicks in and iteratively modifies the plan. The session log reco
 **Step 4: Final Report**
 The user approves the revised plan, and the Synthesizer generates a comprehensive Markdown report with images, maps, budget breakdown, and travel tips.
 
-> 📄 [View the generated report](reports/2d70fc6c-eba7-4d82-9944-0c85d3335582.md)
+> 📄 [View the generated report](media/Toronto_Plan.md)
 
 ## Multi-Agent Architecture
 
-The system is orchestrated as a LangGraph state machine with conditional edges enabling the replan loop and a human-in-the-loop interrupt point.
+The system is orchestrated as a LangGraph state machine with conditional edges enabling the ReplanAgent loop and a human-in-the-loop interrupt point.
 
 ### Workflow Diagram
 
 ```mermaid
-graph LR
+flowchart TD
     A[IntentParser] --> B[Information]
     B --> C[Recommendation]
     C --> D[Routing]
@@ -141,19 +169,19 @@ The system transforms a natural-language travel request into a comprehensive Mar
 
 ### Stage 2: Recommendation & Quality Audit
 
-**Recommendation** uses a two-phase approach:
+The **Recommendation** node applies a two-phase scoring pipeline (see [Agent Roles table](#agent-roles--data-flow) for I/O details):
 1. **Rule-based pre-filtering** — weather conflicts, budget ceiling, must-avoid places
 2. **LLM daily-structured scoring** — theme match (40%), budget fit (30%), rating (20%), time feasibility (10%)
 
 An **anti-hallucination filter** strips any POIs the LLM fabricated that aren't in the real API data.
 
-**Critic** then runs an 11-rule quality audit covering: budget, weather, time feasibility, theme coverage, rating floor, meal arrangements, daily structure, category separation, geographic coherence, must-visit coverage, and holistic LLM-based preference compliance. If issues are found, **AutoReplan** (the ReplanAgent tool-use loop) fixes them automatically.
+The **Critic** then audits the itinerary across 11 dimensions (budget, weather, geography, theme coverage, etc.). If issues are found, **AutoReplan** invokes the ReplanAgent tool-use loop to fix them automatically.
 
 ### Stage 3: Human-in-the-Loop Feedback Loop
 
 At the interrupt point, the user sees a day-by-day itinerary review screen. The feedback cycle:
 
-1. **User provides feedback** (e.g., "把第二天的博物馆换成购物中心")
+1. **User provides feedback** (e.g., "Replace the museum on Day 2 with a shopping mall")
 2. **ReplanAgent** runs autonomously (up to 20 tool-call iterations) — inspects plan, searches new POIs, modifies itinerary, checks constraints
 3. **Modified itinerary** is injected back into the graph
 4. **Graph re-streams** through Routing → Critic (force-approve) → UserReview → INTERRUPT again
@@ -300,7 +328,7 @@ To evaluate whether our multi-agent pipeline outperforms a standalone LLM in tra
 |-----------|-------|
 | **Agent pipeline** | DeepSeek V4 Flash |
 | **Judge** | Gemini 3.1 Pro |
-| **Baselines** | DeepSeek V4 Flash, DeepSeek V4 Pro, GPT-5.5 |
+| **Baselines** | DeepSeek V4 Flash, DeepSeek V4 Pro|
 
 All models receive the same travel-planning queries. The generated itineraries are evaluated using 10 criteria (see below), enabling a fair comparison between our multi-agent pipeline and single-LLM approaches.
 
@@ -399,13 +427,13 @@ We evaluated plans across diverse destinations (short trips and multi-day itiner
 
 The multi-agent approach delivers decisive advantages in the dimensions that matter most to real travelers:
 
-| Advantage | Agent Pipeline | V4 Flash | V4 Pro | Δ vs Best Baseline |
+| Advantage | Agent Pipeline | DeepSeek V4 Flash | DeepSeek V4 Pro | Δ vs Best Baseline |
 |-----------|:--------------:|:--------:|:------:|:------------------:|
 | **Presentation Quality** | **10.00** | 7.75 | 8.25 | **+2.25** |
 | **Information Richness** | **10.00** | 8.50 | 9.00 | **+1.00** |
 | **Completeness** | **8.75** | 7.00 | 7.50 | **+1.25** |
-| **Personalization** | **9.75** | 9.50 | **9.75** | — |
-| **Language Quality** | **10.00** | **10.00** | **10.00** | — |
+
+> *Personalization and Language Quality scored equally across all models (≥9.5 and 10.0 respectively), so they are omitted from the advantage table.*
 
 > These gaps directly reflect the value of multi-agent collaboration: real-time API data ensures **richer information**, the Synthesizer node produces **professionally formatted reports**, and the day-by-day structured recommendation engine delivers **more complete itineraries** than single-LLM baselines.
 
@@ -478,9 +506,9 @@ TravelCrew/
 │       ├── sse.js                   # SSE event handler
 │       └── i18n.js                  # Internationalization (Chinese/English)
 │
-├── reports/                         # Generated reports (persisted .md & .html)
-├── log/                             # Per-session activity logs
-└── output/                          # CLI mode generated reports
+├── reports/                         # Generated reports — {session_id}.md and {session_id}.html
+├── log/                             # Per-session activity logs — {session_id}.log
+└── output/                          # CLI-mode generated reports
 ```
 
 ---
@@ -503,7 +531,7 @@ TravelCrew/
 
 ```bash
 # 1. Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/richardwang1236/TravelCrew.git
 cd TravelCrew
 
 # 2. Create and activate a Python virtual environment
