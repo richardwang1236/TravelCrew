@@ -1,9 +1,5 @@
 <p align="center">
-  <span style="font-size:2.5em;font-weight:800;background:linear-gradient(135deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">✈️ TravelCrew</span>
-</p>
-
-<p align="center" style="font-size:1.1em;color:#6b7280;margin-top:-10px;">
-  Multi-Agent Collaborative Travel Planning
+  <img src="media/title.png" alt="TravelCrew - Multi-Agent Collaborative Travel Planning" width="600">
 </p>
 
 <p align="center">
