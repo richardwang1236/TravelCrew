@@ -1,0 +1,23 @@
+# LangGraph (state machine orchestration + in-memory checkpointing)
+langgraph>=1.0.0
+
+# LangChain Core (direct dependency: RunnableConfig in synthesizer)
+langchain-core>=0.3.0
+
+# LLM client (DeepSeek via OpenAI-compatible SDK)
+openai>=1.0.0
+
+# Environment variable loading
+python-dotenv>=1.0.0
+
+# HTTP client for external APIs (Google Maps, OpenWeather, etc.)
+requests>=2.28.0
+
+# Web framework + server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+
+# PDF generation (markdown -> HTML -> PDF)
+markdown>=3.5
+weasyprint>=60.0

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TravelCrew</title>
+  <meta name="description" content="TravelCrew - Multi-Agent Collaborative Travel Planning" />
+
+  <!-- Tailwind CSS (pre-built static) -->
+  <link rel="stylesheet" href="/static/css/tailwind.min.css?v=20260715b" />
+
+  <!-- Custom styles -->
+  <link rel="stylesheet" href="/static/css/style.css?v=20260715b" />
+</head>
+<body>
+  <!-- Language toggle button (fixed top-right) -->
+  <div id="lang-toggle" style="position:fixed;top:1rem;right:1rem;z-index:50;">
+    <button id="lang-btn" style="cursor:pointer;padding:0.375rem 0.75rem;font-size:0.875rem;font-weight:500;background:rgba(255,255,255,0.8);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid #e5e7eb;border-radius:9999px;box-shadow:0 1px 2px rgba(0,0,0,0.05);transition:all 0.2s;" class="hover:bg-white hover:shadow">
+      EN
+    </button>
+  </div>
+
+  <noscript>
+    <div style="padding: 2rem; text-align: center; font-family: sans-serif;">
+      <h2>JavaScript is disabled</h2>
+      <p>This application requires JavaScript to run. Please enable JavaScript in your browser settings.</p>
+    </div>
+  </noscript>
+
+  <!-- Global error overlay (populated by the onerror handler below) -->
+  <div id="js-error-overlay" style="display:none; position:fixed; top:0; left:0; right:0; z-index:9999; background:#fef2f2; color:#991b1b; border-bottom:2px solid #dc2626; padding:1rem; font-family:monospace; font-size:13px; white-space:pre-wrap; word-break:break-all;"></div>
+
+  <div id="app"></div>
+
+  <!-- Capture uncaught errors and display them on the page for easy debugging -->
+  <script>
+    (function () {
+      var overlay = document.getElementById('js-error-overlay');
+      window.addEventListener('error', function (e) {
+        var msg = '[ERROR] ' + (e.message || 'Unknown error');
+        if (e.filename) msg += '\n  at ' + e.filename + ':' + (e.lineno || '?') + ':' + (e.colno || '?');
+        console.error(msg);
+        if (overlay) {
+          overlay.textContent = overlay.textContent + '\n' + msg;
+          overlay.style.display = 'block';
+        }
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var reason = e.reason;
+        var msg = '[PROMISE] ' + (reason && reason.message ? reason.message : String(reason));
+        console.error(msg);
+        if (overlay) {
+          overlay.textContent = overlay.textContent + '\n' + msg;
+          overlay.style.display = 'block';
+        }
+      });
+
+      // Static Tailwind CSS is served directly — no CDN fallback needed.
+      window.addEventListener('load', function () {
+        console.log('[index] page loaded with static Tailwind CSS.');
+      });
+    })();
+  </script>
+
+  <!-- Application modules -->
+  <script type="module" src="/static/js/app.js?v=20260715b"></script>
+</body>
+</html>

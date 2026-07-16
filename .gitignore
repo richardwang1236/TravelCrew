@@ -1,0 +1,13 @@
+__pycache__/
+.env
+.qoder/
+*.pyc
+*.pyo
+.DS_Store
+.vscode/
+venv/
+output/
+reports/
+results/
+log/
+node_modules/

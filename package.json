@@ -1,0 +1,10 @@
+{
+  "name": "travelcrew",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i frontend/css/tailwind-input.css -o frontend/css/tailwind.min.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.19"
+  }
+}
