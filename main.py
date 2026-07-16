@@ -219,7 +219,7 @@ def main():
     #   - Preferences: relaxed pace, good food, popular attractions
     # This string is passed to the IntentParser node for intent parsing.
     initial_input = {
-        "query": "我明天要去武汉玩3天, 预算 5000 人民币。不喜欢太累，想去吃点好的，要去热门的景点。"
+        "query": "我明天要去武汉玩1天"
     }
 
     # ==========================================
@@ -387,6 +387,16 @@ def main():
             dest = final_state.values.get("intent", {}).get("destination", "unknown")
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_path = os.path.join(output_dir, f"{dest}_{timestamp}.md")
+
+            # ── Fix static map paths for local file viewing ──────────
+            # In CLI mode, /maps/xxx.png is a server-relative path that
+            # only works when served by FastAPI. Convert to a relative
+            # file path (../reports/maps/xxx.png) so the .md file can
+            # be opened directly in a Markdown viewer or browser.
+            maps_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports", "maps")
+            if os.path.isdir(maps_dir):
+                rel_maps = os.path.relpath(maps_dir, output_dir).replace("\\", "/")
+                final_report = final_report.replace("/maps/", f"{rel_maps}/")
 
             with open(output_path, "w", encoding="utf-8") as f:
                 f.write(final_report)

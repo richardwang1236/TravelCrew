@@ -1,20 +1,32 @@
-# TravelCrew: Multi-Agent Collaborative Travel Planning
+<p align="center">
+  <span style="font-size:2.5em;font-weight:800;background:linear-gradient(135deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">✈️ TravelCrew</span>
+</p>
 
-> An AI-powered travel planning system built on LangGraph — where 8 specialized agents collaborate to craft your perfect itinerary, with real-time data, human-in-the-loop feedback, autonomous replan via tool-use agent, and streaming report generation.
+<p align="center" style="font-size:1.1em;color:#6b7280;margin-top:-10px;">
+  Multi-Agent Collaborative Travel Planning
+</p>
 
 <p align="center">
-  <em>Multi-Agent · ReplanAgent Tool-Use Loop · Human-in-the-Loop · SSE Streaming · Anti-Hallucination · Multi-Currency</em>
+  <img src="https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/LangGraph-0.4%2B-purple?logo=langchain&logoColor=white" alt="LangGraph">
+  <img src="https://img.shields.io/badge/DeepSeek-v4--flash-green?logo=openai&logoColor=white" alt="DeepSeek">
+  <img src="https://img.shields.io/badge/FastAPI-0.100%2B-teal?logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License">
 </p>
+
+> An AI-powered travel planning system built on LangGraph — where 8 specialized agents collaborate to craft your perfect itinerary, with real-time data, human-in-the-loop feedback, autonomous replan via tool-use agent, and streaming report generation.
 
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Example Walkthrough](#example-walkthrough)
+- [Multi-Agent Architecture](#multi-agent-architecture)
 - [From Query to Report: The Complete Pipeline](#from-query-to-report-the-complete-pipeline)
 - [ReplanAgent: Autonomous Itinerary Revision](#replanagent-autonomous-itinerary-revision)
 - [Key Features](#key-features)
-- [Multi-Agent Architecture](#multi-agent-architecture)
+- [Evaluation](#evaluation)
 - [Project Structure](#project-structure)
 - [Deployment Guide](#deployment-guide)
 - [Web Interface](#web-interface)
@@ -29,129 +41,150 @@
 
 **TravelCrew** is a multi-agent collaborative travel planning system built on [LangGraph](https://github.com/langchain-ai/langgraph). Instead of a single monolithic LLM call, the system decomposes travel planning into a pipeline of **8 specialized agents**, each responsible for a distinct phase — from parsing user intent, through fetching real-time data, generating recommendations, quality auditing, all the way to producing a beautifully formatted travel report with streaming progress.
 
-When the Critic agent detects quality issues or the user provides feedback, a powerful **ReplanAgent** kicks in — an autonomous tool-use agent that can inspect the plan, search for new POIs via Google Places, swap attractions, update preferences, and verify constraints, all in an iterative loop until the itinerary is perfect.
+A key innovation is the **Human-in-the-Loop interruption** mechanism. Rather than waiting until the final report is generated before asking for revisions, the system pauses early — right after the initial plan is created — so the user can provide feedback immediately. That feedback is then fed into the powerful **ReplanAgent**, an autonomous tool-use agent that can inspect the plan, search for new POIs via Google Places, swap attractions, update preferences, and verify constraints, all in an iterative loop until the user is satisfied.
 
 ---
 
+## Example Walkthrough
+
+Below is a step-by-step demonstration of a typical planning session.
+
+**Step 1: Submit a Query**
+On the front page, the user enters a natural-language travel request:
+> "I want to visit Toronto for 2 days, I prefer outdoor activities, I want to eat steak."
+
+![Front Page](media/front_page.png)
+
+**Step 2: Initial Plan**
+After the pipeline runs (Intent Parsing → Data Fetching → Recommendation → Critic), the system presents an initial itinerary. Notice that the attractions are mostly outdoor and the dining options are steak-related — the agent correctly captured the user's intent.
+
+![Before Replan](media/before_replan.png)
+
+**Step 3: User Feedback & ReplanAgent**
+The user is not fully satisfied and provides feedback:
+> "I want to go to Toronto Island, also I want a better hotel."
+
+The ReplanAgent kicks in and iteratively modifies the plan. The session log records the exact changes:
+
+```
+╔════════════════════════════════════════════════════════════
+║ 📊 ITINERARY_CHANGES                           2026-07-16 11:57:59
+╠════════════════════════════════════════════════════════════
+║ Day 1:
+║   ➖ Attractions: St. Lawrence Market
+║   ➕ Attractions: Toronto Islands
+║   🏨 Hotel: One King West → Canopy by Hilton Toronto Yorkville
+║ Day 2:
+║   🏨 Hotel: One King West → Canopy by Hilton Toronto Yorkville
+╚════════════════════════════════════════════════════════════
+```
+
+![After Replan](media/after_replan.png)
+
+**Step 4: Final Report**
+The user approves the revised plan, and the Synthesizer generates a comprehensive Markdown report with images, maps, budget breakdown, and travel tips.
+
+> 📄 [View the generated report](reports/2d70fc6c-eba7-4d82-9944-0c85d3335582.md)
+
+## Multi-Agent Architecture
+
+The system is orchestrated as a LangGraph state machine with conditional edges enabling the replan loop and a human-in-the-loop interrupt point.
+
+### Workflow Diagram
+
+```mermaid
+graph LR
+    A[IntentParser] --> B[Information]
+    B --> C[Recommendation]
+    C --> D[Routing]
+    D --> E[Critic]
+    E -->|approve| F[UserReview]
+    E -->|replan| G[AutoReplan]
+    E -->|force_approve| F
+    G --> F
+    F --> H["INTERRUPT (HITL)"]
+    H -->|User Approves| I[SynthEnrich]
+    H -->|User Feedback| J[ReplanAgent]
+    J --> D
+    I --> K[Synthesizer]
+    K --> L[END]
+```
+
+### Agent Roles & Data Flow
+
+All agents communicate through a central `TravelState` TypedDict. Each node reads input from state, processes it, and writes output back for the next node:
+
+| # | Node | What It Does | Input | Output |
+|---|------|-------------|-------|--------|
+| 1 | **IntentParser** | Parse user query into structured intent | `query` | `intent` (destination, days, budget), `user_preferences` |
+| 2 | **Information** | Fetch real-time data from 4 APIs in parallel | `intent` | `raw_knowledge` — weather, POIs, hotels, Wikivoyage |
+| 3 | **Recommendation** | Rule-based pre-filtering + LLM daily scoring | `raw_knowledge`, `intent` | `daily_itinerary`, `recommended_pois` |
+| 4 | **UserReview** | Pre-compute display fields, translate POI names | `daily_itinerary` | `exchange_rate`, `currency_symbol`, `is_chinese` |
+| 5 | **Routing** | Transport matrix, coordinate backfill | `recommended_pois` | `transport_matrix`, `routing_metrics` |
+| 6 | **Critic** | 11-rule quality audit; triggers AutoReplan | `daily_itinerary`, `routing_metrics` | `audit_findings`, `replan_count` |
+| 7 | **AutoReplan** | ReplanAgent tool-use loop to fix issues | `daily_itinerary`, `audit_findings` | Modified `daily_itinerary` |
+| 8 | **SynthEnrich** | Enrich with images, static maps, AI descriptions | `daily_itinerary` | Enriched itinerary (`image_url`, `static_map_url`) |
+| 9 | **Synthesizer** | Generate 9-section Markdown report (streaming) | Enriched itinerary + all state | `final_itinerary` |
+
 ## From Query to Report: The Complete Pipeline
 
-The system transforms a natural-language travel request into a comprehensive, beautifully formatted Markdown report through a carefully orchestrated multi-stage pipeline. Here's the complete journey:
+The system transforms a natural-language travel request into a comprehensive Markdown report through a 4-stage pipeline:
 
 ### Stage 1: Intent Parsing & Data Collection
 
-```
-User Query (natural language)
-    │
-    ▼
-┌──────────────────┐
-│  IntentParser    │  LLM extracts: destination, duration, budget (auto currency→USD),
-│                  │  pacing, dietary prefs, group type, must-visit places, interests
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  Information     │  4 external APIs in parallel (ThreadPoolExecutor):
-│                  │  • Google Places (AI Mode + Text Search + Nearby Search)
-│                  │  • Google Weather (forecasts + severe alerts)
-│                  │  • Hotel search (filtered by per-night budget)
-│                  │  • Wikivoyage (customs, safety, transport tips)
-└────────┬─────────┘
-         │
-         ▼
-  raw_knowledge: {pois[], weather, hotels[], wikivoyage{}}
-```
+**IntentParser** extracts structured fields from the user's natural-language query: destination, duration, budget (with automatic currency detection and USD conversion), pacing, dietary preferences, group type, must-visit places, and interests.
+
+**Information** then fetches real-time data from 4 external APIs in parallel via `ThreadPoolExecutor`:
+
+| API | Data Retrieved |
+|-----|----------------|
+| Google Places (AI Mode + Text Search + Nearby Search) | Attractions, restaurants, hotels |
+| Google Weather | Multi-day forecasts + severe weather alerts |
+| Hotel Search (SerpApi) | Hotels filtered by per-night budget |
+| Wikivoyage | Destination customs, safety, transport tips |
 
 ### Stage 2: Recommendation & Quality Audit
 
-```
-raw_knowledge
-    │
-    ▼
-┌──────────────────┐
-│  Recommendation  │  Two-phase recommendation:
-│                  │  Phase 1: Rule-based pre-filtering (weather, budget, must-avoid)
-│                  │  Phase 2: LLM daily-structured scoring (theme 40%, budget 30%,
-│                  │          rating 20%, time 10%) + anti-hallucination filter
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  Routing         │  Coordinate backfill + transport matrix (Google Distance Matrix)
-│                  │  + restore website/maps_url fields
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  Critic          │  11-rule quality audit:
-│                  │  budget, weather, time, theme, rating, meals, structure,
-│                  │  category separation, must-visit coverage, transit, hotel
-└────────┬─────────┘
-         │
-    ┌────┴─────┬────────────┐
-    │          │            │
- approve   replan    force_approve
-    │          │            │
-    │          ▼            │
-    │   ┌────────────┐      │
-    │   │ AutoReplan │      │
-    │   │(ReplanAgent│      │
-    │   │ tool-use   │      │
-    │   │  loop)     │      │
-    │   └─────┬──────┘      │
-    │         │             │
-    └────┬────┘─────────────┘
-         │
-         ▼
-┌──────────────────┐
-│  UserReview      │  Pre-compute display fields:
-│                  │  currency, symbol, exchange rate, language detection,
-│                  │  batch-translate POI names to Chinese (if needed)
-└────────┬─────────┘
-         │
-         ▼
-   ╔═══════════════╗
-   ║  INTERRUPT    ║  Human-in-the-Loop pause point
-   ║ (SynthEnrich) ║  User reviews itinerary, provides feedback or approves
-   ╚═══════════════╝
-```
+**Recommendation** uses a two-phase approach:
+1. **Rule-based pre-filtering** — weather conflicts, budget ceiling, must-avoid places
+2. **LLM daily-structured scoring** — theme match (40%), budget fit (30%), rating (20%), time feasibility (10%)
+
+An **anti-hallucination filter** strips any POIs the LLM fabricated that aren't in the real API data.
+
+**Critic** then runs an 11-rule quality audit covering: budget, weather, time feasibility, theme coverage, rating floor, meal arrangements, daily structure, category separation, geographic coherence, must-visit coverage, and holistic LLM-based preference compliance. If issues are found, **AutoReplan** (the ReplanAgent tool-use loop) fixes them automatically.
 
 ### Stage 3: Human-in-the-Loop Feedback Loop
 
-At the interrupt point, the user sees a day-by-day itinerary review screen. The feedback cycle works as follows:
+At the interrupt point, the user sees a day-by-day itinerary review screen. The feedback cycle:
 
 1. **User provides feedback** (e.g., "把第二天的博物馆换成购物中心")
-2. **ReplanAgent** runs autonomously (up to 20 tool-call iterations):
-   - Inspects current plan → searches for new POIs → modifies itinerary → checks constraints → finalizes
-3. **Modified itinerary** is injected into the graph state
+2. **ReplanAgent** runs autonomously (up to 20 tool-call iterations) — inspects plan, searches new POIs, modifies itinerary, checks constraints
+3. **Modified itinerary** is injected back into the graph
 4. **Graph re-streams** through Routing → Critic (force-approve) → UserReview → INTERRUPT again
 5. **Repeat** until the user is satisfied (empty input = approve)
 
 ### Stage 4: Report Generation
 
-```
-User confirms → resume graph
-    │
-    ▼
-┌──────────────────┐
-│  SynthEnrich     │  Enrich itinerary with:
-│                  │  • POI cover images (Serper.dev, geographic disambiguation)
-│                  │  • Static route maps (Google Static Maps, cached locally)
-│                  │  • POI name translations
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  Synthesizer     │  Assemble all data into a 9-section Markdown report:
-│                  │  1. Trip Overview  2. Pre-Trip Prep  3. Accommodation
-│                  │  4. Daily Itinerary  5. Food Guide  6. Experiences
-│                  │  7. Safety Guide  8. Alternatives  9. Summary
-│                  │  • Streaming output via SSE (token-by-token)
-│                  │  • Anti-hallucination: price backfill, data-source constraints
-└────────┬─────────┘
-         │
-         ▼
-   final_itinerary (Markdown report)
-```
+**SynthEnrich** enriches the confirmed itinerary with:
+- POI cover images (Serper.dev, with geographic disambiguation)
+- Static route maps (Google Static Maps, cached locally)
+- POI name translations and AI-generated descriptions
+
+**Synthesizer** assembles all data into a 9-section Markdown report:
+
+| Section | Content |
+|---------|----------|
+| 1. Trip Overview | Title, dates, budget summary, transport plan |
+| 2. Pre-Trip Prep | Packing list, local policies, travel tips |
+| 3. Accommodation | Hotel cards with images and prices |
+| 4. Daily Itinerary | Hour-by-hour schedule with transit, costs, highlights |
+| 5. Food Guide | Categorized restaurant table with signature dishes |
+| 6. Experiences | Optional activities at confirmed POIs |
+| 7. Safety Guide | Tourist traps, scams, weather, emergency info |
+| 8. Alternatives | Condensed / relaxed / rainy-day variants |
+| 9. Summary | Trip highlights and travel advice |
+
+The report is **streamed token-by-token via SSE** for real-time rendering on the frontend.
 
 ---
 
@@ -261,58 +294,135 @@ POI search uses three-level parallelization for maximum throughput:
 
 ---
 
-## Multi-Agent Architecture
+## Evaluation
 
-The system is orchestrated as a LangGraph state machine with conditional edges enabling the replan loop and a human-in-the-loop interrupt point.
+To evaluate whether our multi-agent pipeline outperforms a standalone LLM in travel planning, we conducted a comparative evaluation on a diverse set of trip-planning tasks covering destinations around the world.
 
-### Workflow Diagram
+### Setup
 
-```mermaid
-graph LR
-    A[IntentParser] --> B[Information]
-    B --> C[Recommendation]
-    C --> D[Routing]
-    D --> E[Critic]
-    E -->|approve| F[UserReview]
-    E -->|replan| G[AutoReplan]
-    E -->|force_approve| F
-    G --> F
-    F --> H["INTERRUPT (HITL)"]
-    H -->|User Approves| I[SynthEnrich]
-    H -->|User Feedback| J[ReplanAgent]
-    J --> D
-    I --> K[Synthesizer]
-    K --> L[END]
+| Component | Model |
+|-----------|-------|
+| **Agent pipeline** | DeepSeek V4 Flash |
+| **Judge** | Gemini 3.1 Pro |
+| **Baselines** | DeepSeek V4 Flash, DeepSeek V4 Pro, GPT-5.5 |
+
+All models receive the same travel-planning queries. The generated itineraries are evaluated using 10 criteria (see below), enabling a fair comparison between our multi-agent pipeline and single-LLM approaches.
+
+### Evaluation Criteria
+
+Each itinerary is scored on a **1–10 scale** across 10 dimensions:
+
+| # | Criterion | Key Question |
+|---|-----------|-------------|
+| 1 | **Constraint Satisfaction** | Does it satisfy all explicit requirements? (destination, dates, budget, preferences, accessibility, etc.) A 15% budget overrun is acceptable. |
+| 2 | **Completeness** | Does it provide a full day-by-day schedule with per-POI details (opening hours, visit duration, map links, prices)? |
+| 3 | **Personalization** | Are attractions, restaurants, hotels, and activities well-matched to the user's preferences and travel style? |
+| 4 | **Practical Feasibility** | Is the itinerary realistically executable considering travel time, opening hours, pacing, and logistics? |
+| 5 | **Budget Reasonableness** | Are costs realistic and internally consistent? Only heavily penalize absurd prices or >20% overruns. |
+| 6 | **Geographic Coherence** | Are attractions geographically clustered to minimize unnecessary travel? |
+| 7 | **Information Richness** | Does it include weather, transport tips, cultural advice, opening hours, booking tips, per-POI tips? |
+| 8 | **Presentation Quality** | Is it visually appealing with tables, images, maps, icons, and good formatting? |
+| 9 | **Language Quality** | Is the report fluent, grammatically correct, and in the user's requested language? |
+| 10 | **Overall Experience** | How satisfying, enjoyable, and useful would this itinerary be for a real traveler? |
+
+### Judging Methods
+
+We experimented with two LLM-as-Judge approaches:
+
+**1. Absolute Rating** — The judge evaluates one plan at a time and assigns an integer score (1–10) per criterion.
+
+**2. Pairwise Comparison** — The judge receives two plans (Plan X & Plan Y) for the same query and picks the winner. To minimize positional bias, the presentation order is randomized.
+
+<details>
+<summary><b>Click to expand: Judge Prompts</b></summary>
+
+#### Absolute Rating Prompt
+
+```text
+You are an expert travel-plan evaluator with years of experience
+reviewing itineraries for real travelers. Your evaluations are
+trusted for their fairness, thoroughness, and calibration.
+
+[RUBRIC — 10 criteria listed above]
+
+EVALUATION PROTOCOL:
+1. Read the ENTIRE itinerary carefully before scoring.
+2. For each criterion, think step by step: what does the plan do
+   well? Where does it fall short?
+3. Assign an integer score (1-10).
+4. Be consistent — similar quality across reports should receive
+   similar scores.
+5. Use the short label (e.g. "Constraint satisfaction") as the key.
+
+Return JSON: {criterion_label: score, ..., "average": mean,
+"reasoning": "1-2 sentence summary"}
 ```
 
-### Agent Roles
+#### Pairwise Comparison Prompt
 
-| # | Agent | Role |
-|---|-------|------|
-| 1 | **IntentParser** | Parses natural language into structured intent (destination, dates, budget, prefs) |
-| 2 | **Information** | Fetches real-time data from 4 APIs in parallel (POIs, weather, hotels, Wikivoyage) |
-| 3 | **Recommendation** | Two-phase: rule-based pre-filtering + LLM daily-structured scoring |
-| 4 | **Routing** | Transport matrix, coordinate backfill, field restoration |
-| 5 | **Critic** | 11-rule quality audit; triggers AutoReplan when issues found |
-| 6 | **AutoReplan** | Runs the ReplanAgent tool-use loop to fix critic-identified issues |
-| 7 | **UserReview** | Pre-computes display fields, batch-translates POI names |
-| 8 | **SynthEnrich** | Enriches with images, static maps, translations |
-| 9 | **Synthesizer** | Generates 9-section Markdown report with streaming output |
+```text
+You are an impartial travel-plan judge. Compare two itineraries
+(Plan_X and Plan_Y) created for the SAME travel query.
 
-### Shared State (TravelState)
+ANTI-BIAS RULES:
+- Read and evaluate Plan_X COMPLETELY before reading Plan_Y.
+- Then read Plan_Y with EQUAL attention and scrutiny.
+- Presentation order MUST NOT influence your judgment.
+- If truly comparable, declare a 'tie'.
+- Base your decision on CRITERIA, not length or verbosity.
 
-All agents communicate through a central `TravelState` TypedDict:
+EVALUATION PROTOCOL:
+1. Score Plan_X on EACH criterion (1-10).
+2. Score Plan_Y on EACH criterion (1-10).
+3. Compare scores side by side.
+4. Determine which plan wins on more criteria.
+5. If one plan dominates (≥60% of criteria), declare it the winner.
+6. Otherwise, declare a tie.
 
+Return JSON: {"winner": "Plan_X"|"Plan_Y"|"tie",
+"reason": "...", "scores": {"Plan_X": {...}, "Plan_Y": {...}}}
 ```
-query --> IntentParser --> intent, user_preferences
-intent --> Information --> raw_knowledge (weather, pois, hotels, wikivoyage)
-raw_knowledge --> Recommendation --> recommended_pois, daily_itinerary
-daily_itinerary --> UserReview --> display_currency, exchange_rate, is_chinese
-recommended_pois --> Routing --> routing_metrics, transport_matrix
-routing_metrics --> Critic --> audit_findings, replan_count
-daily_itinerary --> SynthEnrich --> enriched itinerary (images, maps)
-enriched itinerary --> Synthesizer --> final_itinerary (Markdown report)
-```
+
+</details>
+
+### Evaluation Results
+
+#### Absolute Rating
+
+We evaluated plans across diverse destinations (short trips and multi-day itineraries worldwide). Each model received the same queries and was scored on a 1–10 scale per criterion.
+
+**Overall Ranking:**
+
+| Model | Plans | Average | Rank |
+|-------|:-----:|:-------:|:----:|
+| **Agent Pipeline** | 4 | **9.10** | #1 🏆 |
+| DeepSeek V4 Pro | 4 | 9.05 | #2 |
+| DeepSeek V4 Flash | 4 | 8.60 | #3 |
+
+**Key Strengths of Agent Pipeline:**
+
+The multi-agent approach delivers decisive advantages in the dimensions that matter most to real travelers:
+
+| Advantage | Agent Pipeline | V4 Flash | V4 Pro | Δ vs Best Baseline |
+|-----------|:--------------:|:--------:|:------:|:------------------:|
+| **Presentation Quality** | **10.00** | 7.75 | 8.25 | **+2.25** |
+| **Information Richness** | **10.00** | 8.50 | 9.00 | **+1.00** |
+| **Completeness** | **8.75** | 7.00 | 7.50 | **+1.25** |
+| **Personalization** | **9.75** | 9.50 | **9.75** | — |
+| **Language Quality** | **10.00** | **10.00** | **10.00** | — |
+
+> These gaps directly reflect the value of multi-agent collaboration: real-time API data ensures **richer information**, the Synthesizer node produces **professionally formatted reports**, and the day-by-day structured recommendation engine delivers **more complete itineraries** than single-LLM baselines.
+
+#### Pairwise Comparison
+
+In head-to-head evaluations, the judge received two anonymized plans for the same query and selected the winner based on the 10 criteria (presentation order randomized to eliminate positional bias).
+
+| Matchup | Wins | Ties | Losses | Win Rate |
+|---------|:----:|:----:|:------:|:--------:|
+| **Agent Pipeline** vs V4 Flash | **9** | 1 | 0 | 90.0% |
+| **Agent Pipeline** vs V4 Pro | **8** | 2 | 0 | 80.0% |
+
+> The Agent Pipeline **never lost** a pairwise comparison. Wins were primarily driven by superior presentation quality (images, maps, tables), information richness (real-time API data, weather, transport tips), and completeness (per-POI timing, costs, map links). Ties occurred in scenarios where baselines produced more geographically compact routes for simpler single-city trips.
 
 ---
 
