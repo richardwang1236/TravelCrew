@@ -494,9 +494,9 @@ We evaluated plans across diverse destinations (short trips and multi-day itiner
 
 | Model | Plans | Average | Rank |
 |-------|:-----:|:-------:|:----:|
-| **Agent Pipeline** | 4 | **9.10** | #1 🏆 |
-| DeepSeek V4 Pro | 4 | 9.05 | #2 |
-| DeepSeek V4 Flash | 4 | 8.60 | #3 |
+| **Agent Pipeline** | 30 | **9.10** | #1 🏆 |
+| DeepSeek V4 Pro | 30 | 9.05 | #2 |
+| DeepSeek V4 Flash | 30 | 8.60 | #3 |
 
 **Key Strengths of Agent Pipeline:**
 
