@@ -24,7 +24,9 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 import markdown
-from weasyprint import HTML
+# NOTE: weasyprint is imported lazily inside the download endpoint to avoid
+# crashing the server at startup when system libraries (libpango, libcairo)
+# are not installed. See: https://doc.courtbouillon.org/weasyprint/stable/first_steps.html
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -905,6 +907,20 @@ async def download_report(session_id: str):
 {html_content}
 </body>
 </html>"""
+
+    # Import WeasyPrint lazily — raises a clear HTTP 500 if system libs are missing
+    try:
+        from weasyprint import HTML
+    except OSError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "PDF export is unavailable: WeasyPrint system libraries are not installed. "
+                "Please install libpango and libcairo (e.g. `apt install libpango1.0-dev libcairo2-dev` "
+                "on Debian/Ubuntu, or `brew install pango cairo` on macOS). "
+                f"Original error: {e}"
+            ),
+        )
 
     # Generate PDF — skip images that fail to load (403, timeout, etc.)
     import logging as _logging
